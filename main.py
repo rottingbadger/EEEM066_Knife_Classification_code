@@ -42,10 +42,10 @@ def train(train_loader, model, criterion, optimizer, scaler, scheduler, epoch, v
         scaler.step(optimizer)
         scaler.update()
         scheduler.step()
-        message_train = format_log_message("train", i, epoch, losses.avg, valid_accuracy[0], time_to_str(timer() - start, "sec"))
+        message_train = format_log_message("train", i, epoch, losses.avg, valid_accuracy[0], valid_accuracy[1], valid_accuracy[2], time_to_str(timer() - start, "sec"))
         print(f'\r{message_train}', end='', flush=True)
         
-    message_train_epoch = format_log_message("train", i, epoch, losses.avg, valid_accuracy[0], time_to_str(timer() - start, "sec"))
+    message_train_epoch = format_log_message("train", i, epoch, losses.avg, valid_accuracy[0], valid_accuracy[1], valid_accuracy[2], time_to_str(timer() - start, "sec"))
     log.write("\n")
     log.write(message_train_epoch)
 
@@ -54,6 +54,10 @@ def train(train_loader, model, criterion, optimizer, scaler, scheduler, epoch, v
 def evaluate(val_loader, model, criterion, epoch, train_loss, start, log):
     model.eval()
     map = AverageMeter()
+
+    acc1avg = AverageMeter()
+    acc5avg = AverageMeter()
+
     with torch.no_grad():
         for i, (images, target, fnames) in enumerate(val_loader):
             images = images.cuda(non_blocking=True)
@@ -64,16 +68,22 @@ def evaluate(val_loader, model, criterion, epoch, train_loss, start, log):
                 preds = logits.softmax(1)
             
             valid_map5, valid_acc1, valid_acc5 = map_accuracy(preds, target)
+
             map.update(valid_map5, images.size(0))
+            acc1avg.update(valid_acc1, images.size(0))
+            acc5avg.update(valid_acc5, images.size(0))
+
             # message = f'\rval  {i:5.1f} | {epoch:6.1f} | {train_loss[0]:.3f} | {map.avg:.3f} | {time_to_str(timer() - start, "min")}'
-            message_val = format_log_message("val", i, epoch, train_loss[0], map.avg, time_to_str(timer() - start, "sec"))
+            #message_val = format_log_message("val", i, epoch, train_loss[0], map.avg, time_to_str(timer() - start, "sec"))
+            message_val = format_log_message("val", i, epoch, train_loss[0], map.avg, acc1avg.avg, acc5avg.avg,time_to_str(timer() - start, "sec"))
             print(f'\r{message_val}', end='', flush=True)
+            #print('Acc1=', valid_acc1, 'Acc5=', valid_acc5)
         
-        message_val_epoch = format_log_message("val", i, epoch, train_loss[0], map.avg, time_to_str(timer() - start, "sec"))
+        message_val_epoch = format_log_message("val", i, epoch, train_loss[0], map.avg, acc1avg.avg, acc5avg.avg, time_to_str(timer() - start, "sec"))
         log.write("\n")  
         log.write(message_val_epoch)
     
-    return [map.avg]
+    return [map.avg, acc1avg.avg, acc5avg.avg]
 
 def main():
     # Set the seed for reproducibility
@@ -90,6 +100,7 @@ def main():
     val_loader = DataLoader(val_gen, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=args.num_workers)
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(device)
     
     ## Loading the model to run
     model = timm.create_model(args.model_mode, pretrained=True, num_classes=args.n_classes)
@@ -117,10 +128,10 @@ def main():
 
     log.write(f"==========\nArgs:{args}\n==========")
 
-    log.write("\n" + "-" * 25 + f" [START {timestamp}] " + "-" * 25 + "\n\n")
-    log.write('                           |  Train   |   Valid  |              |\n')
-    log.write(' | Mode  |  Iter  | Epoch  |   Loss   |    mAP   |     Time     |\n')
-    log.write('-' * 79 + '\n')
+    log.write("\n" + "-" * 30 + f" [START {timestamp}] " + "-" * 30 + "\n\n")
+    log.write('                           |  Train   |              Valid               |              |\n')
+    log.write(' | Mode  |  Iter  | Epoch  |   Loss   |    mAP   |    Acc1   |    Acc5   |     Time     |\n')
+    log.write('-' * 89 + '\n')
 
     # Execution control
     if args.evaluate_only:
@@ -135,7 +146,7 @@ def main():
         print("Evaluation complete.")
     else:
         start = timer()
-        val_metrics = [0]
+        val_metrics = [0,0,0]
         
         for epoch in range(args.epochs):
             train_metrics = train(train_loader, model, criterion, optimizer, scaler, scheduler, epoch, val_metrics, start, log)

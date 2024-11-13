@@ -160,8 +160,8 @@ def map_accuracy(probs, truth, k=5):
 
 
 # Standardized message format
-def format_log_message(mode, i, epoch, loss, mAP, time_str):
-    return f'| {mode:<5} | {i:5.1f} | {epoch:5.1f} | {loss:8.3f} | {mAP:7.3f} | {time_str:<12} |'
+def format_log_message(mode, i, epoch, loss, mAP, acc1, acc5, time_str):
+    return f' | {mode:<5} |  {i:5.1f} |  {epoch:5.1f} | {loss:8.3f} |  {mAP:7.3f} |   {acc1:7.3f} |   {acc5:7.3f} |{time_str:<12} |'
 
 
 def set_seed(seed_value):
